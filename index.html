@@ -335,6 +335,7 @@
         let revealedCount = 0;
         let firstClick = true;
         let finalScoreTime = 0;
+        let finalDifficulty = '';
 
         // DOM Elements
         const gridElement = document.getElementById('grid');
@@ -404,12 +405,11 @@
         }
 
         async function saveScore(name, scoreTime) {
-            const difficulty = getDifficultyName();
             try {
                 await addDoc(collection(db, SCORES_COLLECTION), {
                     name: name,
                     time: scoreTime,
-                    difficulty: difficulty,
+                    difficulty: finalDifficulty,
                     createdAt: serverTimestamp()
                 });
             } catch (e) {
@@ -635,6 +635,7 @@
 
             if (won) {
                 finalScoreTime = time;
+                finalDifficulty = getDifficultyName();
                 modalTitle.textContent = 'You Won!';
                 modalMsg.textContent = `Time: ${finalScoreTime} seconds`;
                 modalTitle.style.color = 'var(--success-color)';
