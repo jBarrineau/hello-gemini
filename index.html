@@ -446,6 +446,20 @@
         }
 
         async function saveScore(name, scoreTime) {
+            // Client-side validation (defense in depth - security rules are primary defense)
+            if (!name || name.length === 0 || name.length > 15) {
+                console.error("Invalid name length");
+                return;
+            }
+            if (!scoreTime || scoreTime < 1 || scoreTime >= 10000) {
+                console.error("Invalid score time");
+                return;
+            }
+            if (!['Easy', 'Medium', 'Hard'].includes(finalDifficulty)) {
+                console.error("Invalid difficulty");
+                return;
+            }
+
             try {
                 await addDoc(collection(db, SCORES_COLLECTION), {
                     name: name,
@@ -485,11 +499,23 @@
                     const data = doc.data();
                     const li = document.createElement('li');
                     li.classList.add('leaderboard-item');
-                    li.innerHTML = `
-                        <span class="leaderboard-rank">${rank}.</span>
-                        <span class="leaderboard-name">${data.name}</span>
-                        <span class="leaderboard-time">${data.time}s</span>
-                    `;
+
+                    // Create elements safely to prevent XSS
+                    const rankSpan = document.createElement('span');
+                    rankSpan.className = 'leaderboard-rank';
+                    rankSpan.textContent = rank + '.';
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'leaderboard-name';
+                    nameSpan.textContent = data.name; // Safe: textContent escapes HTML
+
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'leaderboard-time';
+                    timeSpan.textContent = data.time + 's';
+
+                    li.appendChild(rankSpan);
+                    li.appendChild(nameSpan);
+                    li.appendChild(timeSpan);
                     lbList.appendChild(li);
                     rank++;
                 });
