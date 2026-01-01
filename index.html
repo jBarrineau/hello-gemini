@@ -203,7 +203,7 @@
 
         .leaderboard-item {
             display: flex;
-            justify-content: space-between;
+            gap: 0.75rem;
             padding: 0.5rem 0;
             border-bottom: 1px solid #eee;
         }
@@ -212,8 +212,20 @@
             border-bottom: none;
         }
 
-        .leaderboard-name { font-weight: 600; }
-        .leaderboard-time { color: var(--accent-color); font-family: monospace; }
+        .leaderboard-rank {
+            color: #999;
+            min-width: 1.5rem;
+            font-family: monospace;
+        }
+        .leaderboard-name {
+            font-weight: 600;
+            flex: 1;
+        }
+        .leaderboard-time {
+            color: var(--accent-color);
+            font-family: monospace;
+            margin-left: auto;
+        }
 
         #submit-score-form {
             margin-top: 1rem;
@@ -440,15 +452,18 @@
                     return;
                 }
 
+                let rank = 1;
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     const li = document.createElement('li');
                     li.classList.add('leaderboard-item');
                     li.innerHTML = `
+                        <span class="leaderboard-rank">${rank}.</span>
                         <span class="leaderboard-name">${data.name}</span>
                         <span class="leaderboard-time">${data.time}s</span>
                     `;
                     lbList.appendChild(li);
+                    rank++;
                 });
             } catch (e) {
                 console.error("Error fetching scores: ", e);
