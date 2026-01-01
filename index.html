@@ -192,6 +192,57 @@
             to { transform: scale(1); opacity: 1; }
         }
 
+        /* Leaderboard Styles */
+        .leaderboard-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+            text-align: left;
+            min-width: 250px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .leaderboard-item:last-child {
+            border-bottom: none;
+        }
+
+        .leaderboard-name { font-weight: 600; }
+        .leaderboard-time { color: var(--accent-color); font-family: monospace; }
+
+        #submit-score-form {
+            margin-top: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        #player-name-input {
+            padding: 0.5rem;
+            border: 2px solid var(--cell-hidden);
+            border-radius: 6px;
+            outline: none;
+        }
+
+        #player-name-input:focus {
+            border-color: var(--accent-color);
+        }
+
+        .view-leaderboard-btn {
+            background: none;
+            border: none;
+            color: var(--accent-color);
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
     </style>
 </head>
 <body>
@@ -222,11 +273,52 @@
         <div class="modal-content">
             <h2 id="modal-title">Game Over</h2>
             <p id="modal-msg">Try again!</p>
+            
+            <div id="submit-score-section" style="display: none;">
+                <form id="submit-score-form">
+                    <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="15" required>
+                    <button type="submit" class="diff-btn active">Submit Score</button>
+                </form>
+            </div>
+
             <button id="modal-restart" class="diff-btn active">Play Again</button>
+            <br>
+            <button id="view-leaderboard-btn" class="view-leaderboard-btn">View Global Leaderboard</button>
         </div>
     </div>
 
-    <script>
+    <div id="leaderboard-modal" class="modal">
+        <div class="modal-content">
+            <h2>Global Leaderboard</h2>
+            <div id="leaderboard-difficulty-label" style="font-weight: bold; margin-bottom: 0.5rem;">Easy</div>
+            <ul id="leaderboard-list" class="leaderboard-list">
+                <!-- Scores injected here -->
+                <p>Loading...</p>
+            </ul>
+            <button id="close-leaderboard" class="diff-btn">Close</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- FIREBASE CONFIGURATION ---
+        // Replace the config below with your Firebase project details
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, query, where, orderBy, limit, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD58MiQA7Oxk6xiiK6Hexrt6pdyfGzKGH4",
+            authDomain: "sweeping-mines-44f32.firebaseapp.com",
+            projectId: "sweeping-mines-44f32",
+            storageBucket: "sweeping-mines-44f32.firebasestorage.app",
+            messagingSenderId: "762919667252",
+            appId: "1:762919667252:web:261f4ec9126be17da0ac61"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const SCORES_COLLECTION = "scores";
+
         // Game Configuration
         let ROWS = 9;
         let COLS = 9;
@@ -242,6 +334,7 @@
         let minesLocations = new Set();
         let revealedCount = 0;
         let firstClick = true;
+        let finalScoreTime = 0;
 
         // DOM Elements
         const gridElement = document.getElementById('grid');
@@ -253,13 +346,22 @@
         const modalTitle = document.getElementById('modal-title');
         const modalMsg = document.getElementById('modal-msg');
         const modalRestart = document.getElementById('modal-restart');
+        
+        const lbModal = document.getElementById('leaderboard-modal');
+        const lbList = document.getElementById('leaderboard-list');
+        const lbClose = document.getElementById('close-leaderboard');
+        const lbViewBtn = document.getElementById('view-leaderboard-btn');
+        const lbDiffLabel = document.getElementById('leaderboard-difficulty-label');
+        const submitSection = document.getElementById('submit-score-section');
+        const submitForm = document.getElementById('submit-score-form');
+        const playerNameInput = document.getElementById('player-name-input');
 
         // Initialize
         function init() {
             // Setup difficulty buttons
             diffBtns.forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    if (e.target.id === 'modal-restart') return; // handled separately
+                    if (e.target.id === 'modal-restart' || e.target.id === 'close-leaderboard') return;
                     
                     diffBtns.forEach(b => b.classList.remove('active'));
                     e.target.classList.add('active');
@@ -278,7 +380,85 @@
                 startGame();
             });
 
+            lbViewBtn.addEventListener('click', () => {
+                modal.classList.remove('show');
+                showLeaderboard();
+            });
+
+            lbClose.addEventListener('click', () => {
+                lbModal.classList.remove('show');
+                modal.classList.add('show');
+            });
+
+            submitForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = playerNameInput.value.trim();
+                if (name) {
+                    await saveScore(name, finalScoreTime);
+                    submitSection.style.display = 'none';
+                    showLeaderboard();
+                }
+            });
+
             startGame();
+        }
+
+        async function saveScore(name, scoreTime) {
+            const difficulty = getDifficultyName();
+            try {
+                await addDoc(collection(db, SCORES_COLLECTION), {
+                    name: name,
+                    time: scoreTime,
+                    difficulty: difficulty,
+                    createdAt: serverTimestamp()
+                });
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        }
+
+        async function showLeaderboard() {
+            const difficulty = getDifficultyName();
+            lbDiffLabel.textContent = difficulty;
+            lbList.innerHTML = '<p>Loading scores...</p>';
+            lbModal.classList.add('show');
+
+            try {
+                const q = query(
+                    collection(db, SCORES_COLLECTION),
+                    where("difficulty", "==", difficulty),
+                    orderBy("time", "asc"),
+                    limit(10)
+                );
+                
+                const querySnapshot = await getDocs(q);
+                lbList.innerHTML = '';
+                
+                if (querySnapshot.empty) {
+                    lbList.innerHTML = '<p>No scores yet. Be the first!</p>';
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const li = document.createElement('li');
+                    li.classList.add('leaderboard-item');
+                    li.innerHTML = `
+                        <span class="leaderboard-name">${data.name}</span>
+                        <span class="leaderboard-time">${data.time}s</span>
+                    `;
+                    lbList.appendChild(li);
+                });
+            } catch (e) {
+                console.error("Error fetching scores: ", e);
+                lbList.innerHTML = '<p>Error loading scores.</p>';
+            }
+        }
+
+        function getDifficultyName() {
+            if (ROWS === 9) return "Easy";
+            if (COLS === 30) return "Hard";
+            return "Medium";
         }
 
         function startGame() {
@@ -451,10 +631,15 @@
             gameActive = false;
             clearInterval(timerInterval);
 
+            submitSection.style.display = 'none';
+
             if (won) {
+                finalScoreTime = time;
                 modalTitle.textContent = 'You Won!';
-                modalMsg.textContent = `Time: ${time} seconds`;
+                modalMsg.textContent = `Time: ${finalScoreTime} seconds`;
                 modalTitle.style.color = 'var(--success-color)';
+                submitSection.style.display = 'block';
+                playerNameInput.value = '';
             } else {
                 modalTitle.textContent = 'Game Over';
                 modalMsg.textContent = 'You hit a mine!';
